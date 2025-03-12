@@ -83,7 +83,10 @@ fun CurrencyGraphScreen(viewModel: CurrencyClientViewModel = viewModel(), modifi
                 Entry(index.toFloat(), rate ?: 0f)
             }
 
-            CurrencyLineChart(data = completeData, dates = allDates, currency = currency, modifier = Modifier.fillMaxWidth().height(300.dp))
+            val chartWidth = (completeData.size * 50).dp // Espacio fijo entre valores
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                CurrencyLineChart(data = completeData, dates = allDates, currency = currency, modifier = Modifier.width(chartWidth).height(300.dp))
+            }
         } else {
             Text("No hay datos disponibles.")
         }
@@ -117,23 +120,23 @@ fun CurrencyLineChart(data: List<Entry>, dates: List<String>, currency: String, 
                 description.isEnabled = false
                 legend.isEnabled = true
                 setScaleEnabled(true)
+                isDragEnabled = true
+                setPinchZoom(true)
                 xAxis.apply {
                     position = XAxis.XAxisPosition.BOTTOM
                     setDrawGridLines(false)
                     granularity = 1f
                     labelRotationAngle = -45f
                     valueFormatter = IndexAxisValueFormatter(dates)
-                    setLabelCount(dates.size, true)
-                    spaceMin = 0.5f
-                    spaceMax = 0.5f
+                    setLabelCount(dates.size, false)
                 }
                 axisLeft.apply {
-                    granularity = 0.1f
                     val minValue = data.minOfOrNull { it.y } ?: 0f
                     val maxValue = data.maxOfOrNull { it.y } ?: 0f
-                    axisMinimum = (minValue - 2f).coerceAtLeast(0f)
-                    axisMaximum = maxValue + 2f
-                    setLabelCount(10, true)
+                    val range = maxValue - minValue
+                    axisMinimum = minValue - (range * 0.2f)
+                    axisMaximum = maxValue + (range * 0.2f)
+                    granularity = range / 10f
                 }
                 axisRight.isEnabled = false
                 setExtraOffsets(0f, 0f, 0f, 20f)
@@ -142,7 +145,7 @@ fun CurrencyLineChart(data: List<Entry>, dates: List<String>, currency: String, 
         modifier = modifier.fillMaxWidth().height(400.dp),
         update = { lineChart ->
             if (data.isNotEmpty()) {
-                val dataSet = LineDataSet(data, "Tipo de Cambio $currency/MXN").apply {
+                val dataSet = LineDataSet(data, "Tipo de Cambio $currency/USD").apply {
                     color = ColorTemplate.MATERIAL_COLORS[0]
                     valueTextSize = 14f
                     setDrawCircles(true)
