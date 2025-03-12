@@ -24,6 +24,8 @@ import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.IndexAxisValueFormatter
 import com.github.mikephil.charting.utils.ColorTemplate
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,17 +74,37 @@ fun CurrencyGraphScreen(viewModel: CurrencyClientViewModel = viewModel(), modifi
         }
 
         if (exchangeRates.isNotEmpty() && currency.isNotEmpty()) {
-            // Convertir las fechas en índices numéricos para el eje X
-            val filteredData = exchangeRates.mapIndexed { index, rate ->
-                Entry(index.toFloat(), rate.rate.toFloat())
+            val allDates = generateDateRange(startDate, endDate)
+            val rateMap = exchangeRates.associateBy { it.date }
+            var lastValidRate: Float? = null
+            val completeData = allDates.mapIndexed { index, date ->
+                val rate = rateMap[date]?.rate?.toFloat() ?: lastValidRate
+                lastValidRate = rate
+                Entry(index.toFloat(), rate ?: 0f)
             }
-            val dates = exchangeRates.map { it.date } // Lista de fechas para el eje X
 
-            CurrencyLineChart(data = filteredData, dates = dates, currency = currency, modifier = Modifier.fillMaxWidth().height(300.dp))
+            CurrencyLineChart(data = completeData, dates = allDates, currency = currency, modifier = Modifier.fillMaxWidth().height(300.dp))
         } else {
             Text("No hay datos disponibles.")
         }
     }
+}
+
+fun generateDateRange(start: String, end: String): List<String> {
+    val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val startDate = dateFormat.parse(start)
+    val endDate = dateFormat.parse(end)
+    val calendar = Calendar.getInstance()
+    val dateList = mutableListOf<String>()
+
+    if (startDate != null && endDate != null) {
+        calendar.time = startDate
+        while (!calendar.time.after(endDate)) {
+            dateList.add(dateFormat.format(calendar.time))
+            calendar.add(Calendar.DAY_OF_MONTH, 1)
+        }
+    }
+    return dateList
 }
 
 @Composable
@@ -92,55 +114,44 @@ fun CurrencyLineChart(data: List<Entry>, dates: List<String>, currency: String, 
     AndroidView(
         factory = { ctx ->
             LineChart(ctx).apply {
-                description.isEnabled = false // Deshabilitar la descripción
-                legend.isEnabled = true // Habilitar la leyenda
-                setScaleEnabled(true) // Permitir zoom
-
-                // Configuración del eje X
+                description.isEnabled = false
+                legend.isEnabled = true
+                setScaleEnabled(true)
                 xAxis.apply {
-                    position = XAxis.XAxisPosition.BOTTOM // Posición del eje X en la parte inferior
-                    setDrawGridLines(false) // No dibujar líneas de la cuadrícula en el eje X
-                    granularity = 1f // Espaciado entre etiquetas
-                    labelRotationAngle = -45f // Rotar las etiquetas para evitar superposición
-                    valueFormatter = IndexAxisValueFormatter(dates) // Usar las fechas como etiquetas del eje X
-                    setLabelCount(dates.size, true) // Ajustar el número de etiquetas
-                    spaceMin = 0.5f // Espacio mínimo entre etiquetas
-                    spaceMax = 0.5f // Espacio máximo entre etiquetas
+                    position = XAxis.XAxisPosition.BOTTOM
+                    setDrawGridLines(false)
+                    granularity = 1f
+                    labelRotationAngle = -45f
+                    valueFormatter = IndexAxisValueFormatter(dates)
+                    setLabelCount(dates.size, true)
+                    spaceMin = 0.5f
+                    spaceMax = 0.5f
                 }
-
-                // Configuración del eje Y (izquierdo)
                 axisLeft.apply {
-                    granularity = 1f // Espaciado entre valores
-                    axisMinimum = 0f // Valor mínimo del eje Y
-                    // Calcular el valor máximo de los datos y agregar un margen del 10%
+                    granularity = 0.1f
+                    val minValue = data.minOfOrNull { it.y } ?: 0f
                     val maxValue = data.maxOfOrNull { it.y } ?: 0f
-                    axisMaximum = maxValue * 1.1f // Añadir un 10% de espacio adicional
+                    axisMinimum = (minValue - 2f).coerceAtLeast(0f)
+                    axisMaximum = maxValue + 2f
+                    setLabelCount(10, true)
                 }
-
-                // Deshabilitar eje derecho
                 axisRight.isEnabled = false
-
-                // Ajustar el margen inferior para evitar que las etiquetas se corten
-                setExtraOffsets(0f, 0f, 0f, 20f) // Margen inferior de 20f para las etiquetas
+                setExtraOffsets(0f, 0f, 0f, 20f)
             }
         },
-        modifier = modifier.fillMaxWidth().height(400.dp), // Tamaño del gráfico
+        modifier = modifier.fillMaxWidth().height(400.dp),
         update = { lineChart ->
             if (data.isNotEmpty()) {
-                // Crear un conjunto de datos para la gráfica
                 val dataSet = LineDataSet(data, "Tipo de Cambio $currency/MXN").apply {
-                    color = ColorTemplate.COLORFUL_COLORS[0] // Color de la línea
-                    valueTextSize = 12f // Tamaño del texto de los valores
-                    setDrawCircles(true) // Dibujar círculos en los puntos de datos
-                    setDrawValues(true) // Mostrar valores en los puntos de datos
-                    lineWidth = 2f // Grosor de la línea
+                    color = ColorTemplate.MATERIAL_COLORS[0]
+                    valueTextSize = 14f
+                    setDrawCircles(true)
+                    setDrawValues(true)
+                    lineWidth = 3f
+                    mode = LineDataSet.Mode.CUBIC_BEZIER
                 }
-
-                // Configurar los datos de la gráfica
                 val lineData = LineData(dataSet)
                 lineChart.data = lineData
-
-                // Actualizar la gráfica
                 lineChart.notifyDataSetChanged()
                 lineChart.invalidate()
                 lineChart.requestLayout()
